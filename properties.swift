@@ -11,19 +11,13 @@ protocol AnyPropertyProtocol {
     //typealias Applicator = (Root, Value?) -> (Root, didChange: Bool)
     var key: KP { get }
     var value: Value { get }
-    var applicator: (Any, Any?) -> (Any, didChange: Bool) { get set }
+    var applicator: (Any, Any?, Any?) -> (Any, didChange: Bool) { get set }
 }
 
 protocol PartialPropertyProtocol: AnyPropertyProtocol
 where KP: PartialKeyPath<Root> {
     //typealias Applicator = (Root, Value?) -> (Root, didChange: Bool)
     
-}
-
-extension AnyPropertyProtocol {
-    func apply(value: Value?, to: Root) -> (Root, didChange: Bool) {
-        return applicator(to as! Root, value) as! (Self.Root, didChange: Bool)
-    }
 }
 
 protocol PropertyProtocol: PartialPropertyProtocol
@@ -33,6 +27,16 @@ where KP: WritableKeyPath<Root, Value> {
 }
 
 // MARK: - Property Initializable
+
+extension AnyPropertyProtocol {
+    func apply(value: Value?, to: Root) -> (Root, didChange: Bool) {
+        return applicator(to as! Root, value, nil) as! (Self.Root, didChange: Bool)
+    }
+    
+    func apply<T>(value: Value?, to: Root, state: T? ...) -> (Root, didChange: Bool) {
+        return applicator(to as! Root, value, state) as! (Self.Root, didChange: Bool)
+    }
+}
 
 protocol PropertyInitializable {
     init?(with properties: [PartialProperty<Self>])
@@ -92,7 +96,7 @@ struct AnyProperty: AnyPropertyProtocol {
     
     private(set) var key: KP
     private(set) var value: Value
-    var applicator: (Any, Any?) -> (Any, didChange: Bool)
+    var applicator: (Any, Any?, Any?) -> (Any, didChange: Bool)
     
     init<P>(_ base: P) where P: PropertyProtocol {
         self.value = base.value
@@ -108,7 +112,7 @@ struct PartialProperty<R>: PartialPropertyProtocol {
     
     private(set) var key: PartialKeyPath<R>
     private(set) var value: Value
-    var applicator: (Any, Any?) -> (Any, didChange: Bool)
+    var applicator: (Any, Any?, Any?) -> (Any, didChange: Bool)
     
     init<P>(_ base: P) where P: PropertyProtocol, P.Root == R {
         self.value = base.value
@@ -124,14 +128,14 @@ struct Property<R, V>: PropertyProtocol {
     
     private(set) var key: KP
     private(set) var value: Value
-    var applicator: (Any, Any?) -> (Any, didChange: Bool)
+    var applicator: (Any, Any?, Any?) -> (Any, didChange: Bool)
     
     init(key: KP, value: Value) {
         self.key = key
         self.value = value
-        self.applicator = {
-            var instance: R = $0 as! R
-            if let value = $1 as? V {
+        self.applicator = {root, value, _ in 
+            var instance: R = root as! R
+            if let value = value as? V {
                 instance[keyPath: key] = value
                 return (instance, true)
             }
@@ -217,14 +221,16 @@ var fooProps: [PartialProperty<Foo>] = [
 
 let foo = Foo(with: fooProps)
 
-// MARK: - Mocking
+// MARK: - Mockable
 
-protocol Mockable: Codable, PropertyInitializable {
+protocol Mockable: Codable, MockPropertyInitializable {
     //init?(in state: MockableState, default data: Self)
 }
 public enum MockableState {
     case canonical
 }
+
+// MARK: - Mockable Property
 
 enum Mock<V> {
     typealias GeneratorInput = (initialValue: V?, index: Int?)
@@ -232,7 +238,7 @@ enum Mock<V> {
     case singleValue(V)
     case iterate([V])
     case randomize([V])
-    case generate(Generator)
+    case generate(Generator, GeneratorInput)
 }
 
 protocol MockableProperty: PropertyProtocol where Root: Mockable {
@@ -260,28 +266,75 @@ extension MockableProperty {
                 let rand = Int(arc4random_uniform(UInt32(max)))
                 return values[values.index(values.startIndex, offsetBy: rand)]
             }
-        case .generate(let generator):
+        case .generate(let generator, _):
             return generator
         }
     }
 }
+
+// MARK: - MockPropertyInitializable
+
+protocol MockPropertyInitializable: PropertyInitializable {
+    init?<T>(with properties: [PartialProperty<Self>], state: T? ...)
+    init<T>(clone: Self, with mutations: [PartialProperty<Self>], state: T? ...)
+}
+
+extension MockPropertyInitializable {
+    var numberOfNonOptionalProperties: Int64 {
+        return Mirror(reflecting: self).nonOptionalChildren.count
+    }
+    
+    init?<T>(with properties: [PartialProperty<Self>], state: T? ...) {
+        var new = Self._blank
+        var propertiesLeftToInit = new.numberOfNonOptionalProperties
+        
+        for property in properties {
+            let value = property.value
+            let (updated, didChange) = property.apply(value: value, to: new, state: state)
+            if didChange {
+                new = updated
+                if !isOptional(value) { propertiesLeftToInit -= 1 }
+            }
+        }
+        
+        if propertiesLeftToInit == 0 { self = new; return } else { return nil }
+    }
+    
+    init<T>(clone: Self, with mutations: [PartialProperty<Self>], state: T? ...) {
+        self = clone
+        for mutation in mutations { (self, _) = mutation.apply(value: mutation.value, to: self, state: state) }
+    }
+}
+
+// MARK: - Mock Property
 
 struct MockProperty<R: Mockable, V>: MockableProperty {
     typealias Root = R
     typealias Value = V
     typealias KP = WritableKeyPath<R, V>
     
+    struct State {
+        enum ArraySelectionMethod {
+            case iterative
+            case random
+        }
+        
+        let iteration: Int
+        let `default`: Value
+        let arraySelectionMethod: ArraySelectionMethod
+    }
+    
     private(set) var key: KP
     var value: Value { return try! generator((nil, nil)) }
-    var applicator: (Any, Any?) -> (Any, didChange: Bool)
+    var applicator: (Any, Any?, Any?) -> (Any, didChange: Bool)
     private(set) var mock: Mock<Value>
     
     init(key: KP, value: Value) {
         self.init(key: key, mock: .singleValue(value))
     }
     
-    init(key: KP, generator: @escaping Generator) {
-        self.init(key: key, mock: .generate(generator))
+    init(key: KP, generator: @escaping Mock<Value>.Generator, input: Mock<Value>.GeneratorInput) {
+        self.init(key: key, mock: .generate(generator, input))
     }
     
     init(key: KP, possibleValues: [Value], shouldRandomize: Bool = false) {
@@ -292,13 +345,50 @@ struct MockProperty<R: Mockable, V>: MockableProperty {
     init(key: KP, mock: Mock<Value>) {
         self.key = key
         self.mock = mock
-        self.applicator = {
-            var instance: Root = $0 as! R
-            if let value = $1 as? Value {
+        self.applicator = { root, value, state in
+            var instance: Root = root as! R
+            switch (value, state) {
+            case let (value, _) as (Value, Any?):
                 instance[keyPath: key] = value
                 return (instance, true)
+            case let (values, state) as ([Value], [Int]):
+                guard !state.isEmpty else {
+                    return (instance, false)
+                }
+                instance[keyPath: key] = values[state[0]]
+                return (instance, true)
+            case let (values, state) as ([Value], [Bool]):
+                guard !state.isEmpty else {
+                    return (instance, false)
+                }
+                let shouldRandomize = state[0]
+                switch shouldRandomize {
+                case true:
+                    let index = Int(arc4random_uniform(UInt32(values.count - 1)))
+                    instance[keyPath: key] = values[index]
+                case false:
+                    instance[keyPath: key] = values[0]
+                }
+                return (instance, true)
+            case let (valueGenerator, state) as (Mock<Value>.Generator, [(Mock<Value>.GeneratorInput)]):
+                guard !state.isEmpty else {
+                    return (instance, false)
+                }
+                switch mock {
+                case .generate(let gen, let input):
+                    do {
+                        instance[keyPath: key] = try gen(input)
+                        return (instance, true)
+                    } catch {
+                        print(error)
+                        return (instance, false)
+                    }
+                default:
+                    return (instance, false)
+                }
+            default:
+                return (instance, false)
             }
-            return (instance, false)
         }
     }
     
@@ -311,24 +401,10 @@ struct MockProperty<R: Mockable, V>: MockableProperty {
     }
 }
 
-extension Array {
-    init<R>(_ properties: (key: PartialKeyPath<R>, value: Any?) ...) where Element == PartialProperty<R> {
-        var new = [PartialProperty<R>]()
-        func add<V>(_ prop: (key: PartialKeyPath<R>, value: Any?), _ value: V) {
-            print(V.self)
-            //new.append(Property(key: prop.key as! WritableKeyPath<R, V>, value: value).partial)
-        }
-        properties.forEach {prop in 
-            add(prop, prop.value)
-        }
-        self = new
-    }
-}
+// MARK: - Bug:
 
-infix operator +=: AssignmentPrecedence
 infix operator +: AdditionPrecedence
 infix operator ~: AdditionPrecedence
-infix operator +=>: AssignmentPrecedence
 
 extension Array where Element == PartialProperty<Any?> {
     static func + <Root, Value>(left: Array<PartialProperty<Root>>, right: (WritableKeyPath<Root, Value>, Value)) -> Array<PartialProperty<Root>>
@@ -349,32 +425,6 @@ extension Array where Element == PartialProperty<Any?> {
         new.append(partial)
         print(new.count)
         return new
-    }
-    
-    static func +=> <Root, Value>(left: inout Array<PartialProperty<Root>>, right: (WritableKeyPath<Root, Value>, Value))
-    { 
-        var new = left
-        print(left.count)
-        let partial = (Property<Root, Value>(key: right.0, value: right.1)).partial
-        new.append(partial)
-        print(new.count)
-    }
-}
-
-extension Array where Element == PartialProperty<Any?> {
-    static func += <Root: Mockable, Value>(left: inout Array<PartialProperty<Root>>, right: (WritableKeyPath<Root, Value>, Value))
-    { 
-        left.append((MockProperty<Root, Value>(key: right.0, value: right.1)).partial)
-    }
-    
-    static func += <Root: Mockable, Value>(left: inout Array<PartialProperty<Root>>, right: (WritableKeyPath<Root, Value>, [Value], shouldRandomize: Bool))
-    { 
-        left.append((MockProperty<Root, Value>(key: right.0, possibleValues: right.1, shouldRandomize: right.shouldRandomize)).partial)
-    }
-    
-    static func += <Root: Mockable, Value>(left: inout Array<PartialProperty<Root>>, right: (WritableKeyPath<Root, Value>, generator: Mock<Value>.Generator))
-    { 
-        left.append((MockProperty<Root, Value>(key: right.0, generator: right.generator)).partial)
     }
 }
 
@@ -403,27 +453,65 @@ assert(testz!.a == 2)
 assert(testz!.b == "2")
 assert(testz!.c == 2.0)
 
+// MARK: - Mockables test
+
 struct Mag: Mockable {
     private(set) var a: Int
     private(set) var b: String
     private(set) var c: Double?
     static var _blank: Mag {
-        return Mag(a: 1, b: "1", c: 1.0)
+        return Mag(a: 1, b: "10", c: 1.0)
     }
 }
 
-let gen: Mock<String>.Generator = { input in
-    let val = "\(input.initialValue ?? "new")"
-    let index = input.index ?? 0
-    return val + "\(index)"
+infix operator =>
+infix operator ~>
+
+extension WritableKeyPath {
+    static func => (left: WritableKeyPath<Root, Value>, right: @autoclosure @escaping () throws -> Value) throws -> PartialProperty<Root> {
+        return Property<Root, Value>(key: left, value: try right()).partial
+    }
 }
 
-var m: [PartialProperty<Mag>] = []
-m += (\.a, 2) // use = instead of ,
-m += (\.b, generator: gen)
-m += (\.c, [1.0, 2.0, 2.5], shouldRandomize: true)
+extension WritableKeyPath where Root: Mockable {
+    //static func => (left: WritableKeyPath<Root, Value>, right: @escaping Mock<Value>.Generator) throws -> PartialProperty<Root> {
+    //return MockProperty<Root, Value>(key: left, generator: right).partial
+    //}
+    
+    static func => (left: WritableKeyPath<Root, Value>, right: (generator: Mock<Value>.Generator, input: Mock<Value>.GeneratorInput)) throws -> PartialProperty<Root> {
+        return MockProperty<Root, Value>(key: left, generator: right.generator, input: right.input).partial
+    }
+}
 
-let magtest1 = Mag(with: m) 
+typealias GeneratorInput<V> = (initialValue: V?, index: Int?)
+
+func gen<V: StringProtocol> (_ input: GeneratorInput<V>) throws -> V { 
+    let val = "\(input.initialValue ?? "2")"
+    let index = input.index ?? 0
+    return val + "\(index)" as! V
+}
+
+var m: [PartialProperty<Mag>] = try! [
+    \.a => 2,
+    \.b => gen((nil, nil)),
+    \.c => nil
+]
+//m += (\.b, generator: gen)
+//m += (\.c, [1.0, 2.0, 2.5], shouldRandomize: true)
+
+let magtest1 = try! Mag(with: [
+    \.a => 2,
+    \.b => gen((nil, nil)),
+    \.c => nil
+    ]
+) 
+
+let magtest2 = try! Mag(with: [
+    \.a => 2,
+    \.b => (generator: gen, input: (initialValue: nil, index: 2)),
+    \.c => nil
+    ]
+) 
 
 extension Mag {
     
