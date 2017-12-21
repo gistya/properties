@@ -39,9 +39,7 @@ extension PartialPropertyProtocol {
 }
 
 protocol PropertyProtocol: PartialPropertyProtocol
-where KP: WritableKeyPath<Root, Value> {
-    
-}
+where KP: WritableKeyPath<Root, Value> {}
 
 // MARK: - Implementations
 
@@ -90,74 +88,61 @@ struct Property<R, V>: PropertyProtocol {
 }
 
 protocol PropertyInitializable {
-    init()
-    init?(with properties: [PartialProperty<Self>], copying rest: Self?)
+    init?(with properties: [PartialProperty<Self>])
+    init(clone: Self, with mutations: [PartialProperty<Self>])
+    static var _blank: Self { get }
 }
+
 extension PropertyInitializable {
-    init?(with properties: [PartialProperty<Self>], copying rest: Self?) {
-        var proto: Self 
-        var i = 0
-        
-        switch rest {
-        case nil:
-            proto = Self()
-        case let copy:
-            proto = copy!
-            i = Int.max
-        }
-        
-        for property in properties {
-            let (result, didChange) = property.apply(value: property.value, to: proto)
-            if didChange {
-                proto = result
-                i != Int.max && property.value...?! ? i += 1 : ()
-            }
-        }
-        
-        if i >= proto.numberOfRequiredProperties {
-            self = proto
-            return
-        } else {
-            return nil
-        }
+    var numberOfNonOptionalProperties: Int64 {
+        return Mirror(reflecting: self).nonOptionalChildren.count
     }
     
-    var numberOfRequiredProperties: Int {
-        let mirror = Mirror(reflecting: self)
-        for child in mirror.children {
-            print(child)
+    init?(with properties: [PartialProperty<Self>]) {
+        var new = Self._blank
+        var propertiesLeftToInit = new.numberOfNonOptionalProperties
+        
+        for property in properties {
+            let (updated, didChange) = property.apply(value: property.value, to: new)
+            if didChange {
+                new = updated
+                if !isOptional(property.value) { propertiesLeftToInit -= 1 }
+            }
         }
-        print(mirror.displayStyle)
-        let count = (mirror.children.filter { child in
-            guard let varName = child.label, 
-                let descendant = mirror.descendant(varName) else {
-                    print("no descendant")
-                    return false
-            }
-            print("descendant: ",descendant)
-            if descendant == nil {
-                print("nil descendant")
-                return false
-            }
-            return descendant...?!
-        }).count
-        print("count: ",count)
-        return count
+        
+        if propertiesLeftToInit == 0 { self = new; return } else { return nil }
+    }
+    
+    init(clone: Self, with mutations: [PartialProperty<Self>]) {
+        self = clone
+        for mutation in mutations { (self, _) = mutation.apply(value: mutation.value, to: self) }
     }
 }
 
-struct Test2: PropertyInitializable {
-    private(set) var str1: String = ""
-    private(set) var int4: Int? = nil
-    init() {}
+extension Mirror {
+    var nonOptionalChildren: Mirror.Children {
+        let filtered = self.children.filter { child in
+            guard let varName = child.label, let descendant = self.descendant(varName) else { return false }
+            return !isOptional(descendant)
+        }
+        return Mirror.Children(filtered)
+    }
 }
 
-postfix operator ...?!
-postfix func ...?!<T>(_ instance: T) -> Bool {
-    let subject = "\(Mirror(reflecting: instance).subjectType)"
-    return !subject.hasPrefix("Optional") 
+func isOptional<T>(_ instance: T) -> Bool {
+    guard let displayStyle = Mirror(reflecting: instance).displayStyle 
+        else { return false }
+    return displayStyle == .optional
 }
-// hacky; is there a better way?
+
+struct Test2 {
+    private(set) var str1: String
+    private(set) var int4: Int?
+    private(set) var int5: Int?
+}
+extension Test2: PropertyInitializable {
+    static var _blank = Test2(str1: "ERROR-NOT-SET", int4: nil, int5: nil)
+}
 
 // succeeds to init
 var properties1: [PartialProperty<Test2>] = [
@@ -183,33 +168,36 @@ var properties4: [PartialProperty<Test2>] = [
     Property(key: \Test2.int4, value: nil).partial
 ]
 
-let test1 = Test2(with: properties1, copying: nil)
+let test1 = Test2(with: properties1)
 assert(test1 != nil, "test1 should not be nil")
+assert(test1!.str1 == "asdf", "test1.str1 should be 'asdf'")
 
-let test2 = Test2(with: properties2, copying: nil)
+let test2 = Test2(with: properties2)
 assert(test2 != nil, "test2 should not be nil")
+assert(test2!.str1 == "asdf", "test2.str1 should be 'asdf'")
+assert(test2!.int4 == 1337, "test2.int4 should be 1337")
 
-let test3 = Test2(with: properties3, copying: nil)
-assert(test3 == nil, "test2 should be nil")
+let test3 = Test2(with: properties3)
+assert(test3 == nil, "test3 should be nil")
 
-let test4 = Test2(with: properties4, copying: test2)
-assert(test4 != nil, "test4 should not be nil")
-assert(test4?.int4 == nil, "test4.int4 should be nil")
+let test4 = Test2(clone: test2!, with: properties4)
+assert(test4.str1 == "asdf", "test4.str1 should be 'asdf'")
+assert(test4.int4 == nil, "test4.int4 should be nil")
 
-let test5 = Test2(with: properties3, copying: test2)
-assert(test5 != nil, "test5 should not be nil")
-assert(test5?.int4 == 1337, "test5.int5 should be 1337")
+let test5 = Test2(clone: test2!, with: properties3)
+assert(test5.str1 == "asdf", "test5.str1 should be 'asdf'")
+assert(test5.int4 == 1337, "test5.int5 should be 1337")
 
-final class Foo: PropertyInitializable {
+final class Foo {
     private(set) var bar: NSNumber = 0
     private(set) var baz: URLSession? = nil
-    required init() {}
+}
+extension Foo: PropertyInitializable {
+    static var _blank: Foo = Foo()
 }
 
 var fooProps: [PartialProperty<Foo>] = [
     Property(key: \Foo.bar, value: 5).partial
 ]
 
-let foo = Foo(with: fooProps, copying: nil)
-
-
+let foo = Foo(with: fooProps)
