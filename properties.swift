@@ -1,3 +1,4 @@
+
 postfix operator …
 postfix func … <T, R>(key: T) -> R where T: RawRepresentable, R == T.RawValue {
     return key.rawValue
@@ -116,8 +117,9 @@ struct Bar {
     //func asdf<KP, P: AnyPropertyProtocol>(kp: KP, p: P) where KP: KeyPath<
     init?<P>(properties: [P]) where P: PartialPropertyProtocol, P.Root == Bar {
         print(keys)
-        for key in keys {
-            guard let prop = (properties.first { $0.key == key && type(of: $0.key) == type(of: key) })
+        for (key, property) in zip(keys, properties) where key == property.key {
+            //guard let prop = (properties.first { $0.key == key && type(of: $0.key) == type(of: key) })
+            guard let val = properties.firstValue(for: key)
                 else {
                     print("fail")
                     continue
