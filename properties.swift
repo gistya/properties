@@ -90,38 +90,45 @@ struct Property<R, V>: PropertyProtocol {
 }
 
 protocol PropertyInitializable {
-    ///
     init()
     init?(with properties: [PartialProperty<Self>], copying rest: Self?)
 }
 extension PropertyInitializable {
     init?(with properties: [PartialProperty<Self>], copying rest: Self?) {
-        var proto: Self = rest ?? Self()
-        let mirror = Mirror(reflecting: proto)
+        var proto: Self 
         var i = 0
+        
+        switch rest {
+        case nil:
+            proto = Self()
+        case let copy:
+            proto = copy!
+            i = Int.max
+        }
         
         for property in properties {
             let (result, didChange) = property.apply(value: property.value, to: proto)
             if didChange {
                 proto = result
-                i += 1
+                i != Int.max && property.value...?! ? i += 1 : ()
             }
         }
         
-        if i == Self.numberOfRequiredProperties(on: proto) {
+        if i >= proto.numberOfRequiredProperties {
             self = proto
             return
         } else {
             return nil
         }
     }
-    static func numberOfRequiredProperties(on instance: Self) -> Int {
+    
+    var numberOfRequiredProperties: Int {
         let mirror = Mirror(reflecting: self)
         for child in mirror.children {
             print(child)
         }
         print(mirror.displayStyle)
-        return (mirror.children.filter { child in
+        let count = (mirror.children.filter { child in
             guard let varName = child.label, 
                 let descendant = mirror.descendant(varName) else {
                     print("no descendant")
@@ -132,65 +139,77 @@ extension PropertyInitializable {
                 print("nil descendant")
                 return false
             }
-            let subject = "\(Mirror(reflecting: descendant).subjectType)"
-            return subject.hasPrefix("Optional")
+            return descendant...?!
         }).count
+        print("count: ",count)
+        return count
     }
 }
 
-
-protocol KeyPathsForInitProtocol {
-    associatedtype Root
-    typealias PKP = PartialKeyPath<Root>
-    static var required: [PKP] { get }
-    //static var optional: [PKP] { get }
+struct Test2: PropertyInitializable {
+    private(set) var str1: String = ""
+    private(set) var int4: Int? = nil
+    init() {}
 }
 
-struct Test2 {
-    private(set) var str1: String
-    //private(set) var int4: Int?
-    
-    /// Necessary machinery for property array init
-    private struct KeyPathsForInit: KeyPathsForInitProtocol {
-        typealias Root = Test2
-        static let required: [PartialKeyPath<Test2>] = [\Test2.str1]
-        //static let optional: [PartialKeyPath<Test2>] = [\Test2.int4]
-    }
-    
-    init(str1: String = "notSet"/*, int4: Int? = -999*/) {
-        self.str1 = str1
-        //self.int4 = int4
-    }
-    
-    init?(with properties: [PartialProperty<Test2>], copying rest: Test2? = nil) {
-        var proto: Test2 = rest ?? Test2()
-        var i = 0
-        
-        for property in properties {
-            let (result, didChange) = property.apply(value: property.value, to: proto)
-            if didChange {
-                proto = result
-                i += 1
-            }
-        }
-        
-        if i == KeyPathsForInit.required.count {
-            self = proto
-            return
-        } else {
-            return nil
-        }
-    }
+postfix operator ...?!
+postfix func ...?!<T>(_ instance: T) -> Bool {
+    let subject = "\(Mirror(reflecting: instance).subjectType)"
+    return !subject.hasPrefix("Optional") 
 }
+// hacky; is there a better way?
 
-var properties3: [PartialProperty<Test2>] = [
+// succeeds to init
+var properties1: [PartialProperty<Test2>] = [
     Property(key: \Test2.str1, value: "asdf").partial,
-    //Property.partial(key: \Test2.int4, value: 1337)
+    //Property(key: \Test2.int4, value: 1337).partial
 ]
 
-let x = Test2.init()
-let z = x[keyPath: \Test2.str1]
+// succeeds to init 
+var properties2: [PartialProperty<Test2>] = [
+    Property(key: \Test2.str1, value: "asdf").partial,
+    Property(key: \Test2.int4, value: 1337).partial
+]
 
-let test_2 = Test2(with: properties3)
+// will fail to init because str1 is not optional
+var properties3: [PartialProperty<Test2>] = [
+    //Property(key: \Test2.str1, value: "asdf").partial,
+    Property(key: \Test2.int4, value: 1337).partial
+]
+
+// succeeds to init 
+var properties4: [PartialProperty<Test2>] = [
+    Property(key: \Test2.str1, value: "asdf").partial,
+    Property(key: \Test2.int4, value: nil).partial
+]
+
+let test1 = Test2(with: properties1, copying: nil)
+assert(test1 != nil, "test1 should not be nil")
+
+let test2 = Test2(with: properties2, copying: nil)
+assert(test2 != nil, "test2 should not be nil")
+
+let test3 = Test2(with: properties3, copying: nil)
+assert(test3 == nil, "test2 should be nil")
+
+let test4 = Test2(with: properties4, copying: test2)
+assert(test4 != nil, "test4 should not be nil")
+assert(test4?.int4 == nil, "test4.int4 should be nil")
+
+let test5 = Test2(with: properties3, copying: test2)
+assert(test5 != nil, "test5 should not be nil")
+assert(test5?.int4 == 1337, "test5.int5 should be 1337")
+
+final class Foo: PropertyInitializable {
+    private(set) var bar: NSNumber = 0
+    private(set) var baz: URLSession? = nil
+    required init() {}
+}
+
+var fooProps: [PartialProperty<Foo>] = [
+    Property(key: \Foo.bar, value: 5).partial
+]
+
+let foo = Foo(with: fooProps, copying: nil)
 
 
