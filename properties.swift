@@ -1,5 +1,3 @@
-// 
-
 // MARK: - Property Protocols
 
 import Foundation
