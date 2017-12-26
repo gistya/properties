@@ -27,17 +27,13 @@ where KP: WritableKeyPath<Root, Value> {
 // MARK: - Property Initializable
 
 extension AnyPropertyProtocol {
-    func apply(value: Value?, to: Root) -> (Root, didChange: Bool) {
-        return applicator(to as! Root, value, nil) as! (Self.Root, didChange: Bool)
-    }
-    
-    func apply<T>(value: Value?, to: Root, state: T? ...) -> (Root, didChange: Bool) {
-        return applicator(to as! Root, value, state) as! (Self.Root, didChange: Bool)
+    func apply(value: Value?, to root: Root) -> (Root, didChange: Bool) {
+        return applicator(root as! Root, value, nil) as! (Self.Root, didChange: Bool)
     }
 }
 
 protocol PropertyInitializable {
-    init?(with properties: [PartialProperty<Self>])
+    init?(_ properties: [PartialProperty<Self>])
     init(clone: Self, with mutations: [PartialProperty<Self>])
     static var _blank: Self { get }
 }
@@ -47,7 +43,7 @@ extension PropertyInitializable {
         return Mirror(reflecting: self).nonOptionalChildren.count
     }
     
-    init?(with properties: [PartialProperty<Self>]) {
+    init?(_ properties: [PartialProperty<Self>]) {
         var new = Self._blank
         var propertiesLeftToInit = new.numberOfNonOptionalProperties
         
@@ -63,16 +59,28 @@ extension PropertyInitializable {
         if propertiesLeftToInit == 0 { self = new; return } else { return nil }
     }
     
+    init?(_ properties: PartialProperty<Self>...) {
+        self.init(properties)
+    }
+    
     init(clone: Self, with mutations: [PartialProperty<Self>]) {
         self = clone
         for mutation in mutations { (self, _) = mutation.apply(value: mutation.value, to: self) }
+    }
+    
+    init(clone: Self, with mutations: PartialProperty<Self>...) {
+        self.init(clone: clone, with: mutations)
     }
 }
 
 extension Mirror {
     var nonOptionalChildren: Mirror.Children {
+        print(self)
+        print(self)
         let filtered = self.children.filter { child in
+            print(child)
             guard let varName = child.label, let descendant = self.descendant(varName) else { return false }
+            print(descendant)
             return !isOptional(descendant)
         }
         return Mirror.Children(filtered)
@@ -141,6 +149,8 @@ struct Property<R, V>: PropertyProtocol {
         }
     }
     
+    //todo: add the below to protocols?
+    
     var partial: PartialProperty<Root> {
         return PartialProperty(self)
     }
@@ -185,16 +195,16 @@ var properties4: [PartialProperty<Test2>] = [
     Property(key: \Test2.int4, value: nil).partial
 ]
 
-let test1 = Test2(with: properties1)
+let test1 = Test2(properties1)
 assert(test1 != nil, "test1 should not be nil")
 assert(test1!.str1 == "asdf", "test1.str1 should be 'asdf'")
 
-let test2 = Test2(with: properties2)
+let test2 = Test2(properties2)
 assert(test2 != nil, "test2 should not be nil")
 assert(test2!.str1 == "asdf", "test2.str1 should be 'asdf'")
 assert(test2!.int4 == 1337, "test2.int4 should be 1337")
 
-let test3 = Test2(with: properties3)
+let test3 = Test2(properties3)
 assert(test3 == nil, "test3 should be nil")
 
 let test4 = Test2(clone: test2!, with: properties4)
@@ -217,11 +227,22 @@ var fooProps: [PartialProperty<Foo>] = [
     Property(key: \Foo.bar, value: 5).partial
 ]
 
-let foo = Foo(with: fooProps)
+let foo = Foo(fooProps)
+
+// MARK: - Sugar
+
+infix operator =>
+infix operator ~> // todo: make any
+
+extension WritableKeyPath {
+    static func => (left: WritableKeyPath<Root, Value>, right: @autoclosure @escaping () throws -> Value) throws -> PartialProperty<Root> {
+        return Property<Root, Value>(key: left, value: try right()).partial
+    }
+}
 
 // MARK: - Mockable
 
-protocol Mockable: Codable, MockPropertyInitializable {
+protocol Mockable: Codable, PropertyInitializable {
     //init?(in state: MockableState, default data: Self)
 }
 public enum MockableState {
@@ -230,77 +251,54 @@ public enum MockableState {
 
 // MARK: - Mockable Property
 
-enum Mock<V> {
-    typealias GeneratorInput = (initialValue: V?, index: Int?)
-    typealias Generator = (GeneratorInput) throws -> V
-    case singleValue(V)
-    case iterate([V])
-    case randomize([V])
-    case generate(Generator, GeneratorInput)
+struct Mock<Value>: PropertyInitializable {
+    indirect enum CreationMethod {
+        case none
+        case single(Value)
+        case iterate([Value])
+        case randomize([Value])
+        case generate(Generator, CreationMethod)
+    }
+    typealias Generator = (CreationMethod) -> Value
+    private(set) var iteration: Int
+    private(set) var `default`: Value?
+    private(set) var creationMethod: CreationMethod
+    static var _blank: Mock<Value> { return Mock<Value>(iteration: 0, default: nil, creationMethod: .none) }
 }
 
 protocol MockableProperty: PropertyProtocol where Root: Mockable {
-    typealias Generator = Mock<Value>.Generator
     var mock: Mock<Value> { get }
-    var generator: Generator { get }
 }
 
 extension MockableProperty {
-    var generator: Generator {
-        switch mock {
-        case .singleValue(let value):
-            return { _ in value }
-        case .iterate(let values):
-            return { input in 
-                var index = input.index ?? 0
+    var value: Value {
+        get {
+            switch mock.creationMethod {
+            case .none:
+                fatalError()
+            case .single(let value):
+                return value
+            case .iterate(let values):
+                var index = mock.iteration
                 if index >= values.count {
                     index = values.count % index
                 } 
                 return values[values.index(values.startIndex, offsetBy: index)]
-            }
-        case .randomize(let values):
-            return { _ in // maybe use input.index for something here... ?
+            case .randomize(let values):
                 let max = values.count - 1
                 let rand = Int(arc4random_uniform(UInt32(max)))
                 return values[values.index(values.startIndex, offsetBy: rand)]
-            }
-        case .generate(let generator, _):
-            return generator
-        }
-    }
-}
-
-// MARK: - MockPropertyInitializable
-
-protocol MockPropertyInitializable: PropertyInitializable {
-    init?<T>(with properties: [PartialProperty<Self>], state: T? ...)
-    init<T>(clone: Self, with mutations: [PartialProperty<Self>], state: T? ...)
-}
-
-extension MockPropertyInitializable {
-    var numberOfNonOptionalProperties: Int64 {
-        return Mirror(reflecting: self).nonOptionalChildren.count
-    }
-    
-    init?<T>(with properties: [PartialProperty<Self>], state: T? ...) {
-        var new = Self._blank
-        var propertiesLeftToInit = new.numberOfNonOptionalProperties
-        
-        for property in properties {
-            let value = property.value
-            let (updated, didChange) = property.apply(value: value, to: new, state: state)
-            if didChange {
-                new = updated
-                if !isOptional(value) { propertiesLeftToInit -= 1 }
+            case .generate(let generator, let creationMethod):
+                return generator(creationMethod)
             }
         }
-        
-        if propertiesLeftToInit == 0 { self = new; return } else { return nil }
+        set {
+            // do nothing. this is just to let us use the default init
+        }
     }
     
-    init<T>(clone: Self, with mutations: [PartialProperty<Self>], state: T? ...) {
-        self = clone
-        for mutation in mutations { (self, _) = mutation.apply(value: mutation.value, to: self, state: state) }
+    func apply(mock: Mock<Value>, to root: Root) -> (Root, didChange: Bool) {
+        return applicator(root as! Root, mock, nil) as! (Self.Root, didChange: Bool)
     }
 }
 
@@ -311,82 +309,45 @@ struct MockProperty<R: Mockable, V>: MockableProperty {
     typealias Value = V
     typealias KP = WritableKeyPath<R, V>
     
-    struct State {
-        enum ArraySelectionMethod {
-            case iterative
-            case random
-        }
-        
-        let iteration: Int
-        let `default`: Value
-        let arraySelectionMethod: ArraySelectionMethod
-    }
-    
     private(set) var key: KP
-    var value: Value { return try! generator((nil, nil)) }
-    var applicator: (Any, Any?, Any?) -> (Any, didChange: Bool)
     private(set) var mock: Mock<Value>
     
+    var applicator: (Any, Any?, Any?) -> (Any, didChange: Bool)
+    
     init(key: KP, value: Value) {
-        self.init(key: key, mock: .singleValue(value))
+        let mock: Mock<Value> = try! Mock<Value>(
+            \.creationMethod => .single(value)
+            )!
+        self.init(key: key, mock: mock)
     }
     
-    init(key: KP, generator: @escaping Mock<Value>.Generator, input: Mock<Value>.GeneratorInput) {
-        self.init(key: key, mock: .generate(generator, input))
+    init(key: KP, possibleValues: [Value], shouldRandomize: Bool = false, iteration: Int) {
+        let mock: Mock<Value> = try! Mock<Value>(
+            \.iteration => iteration,
+            \.creationMethod => (shouldRandomize 
+                ? .randomize(possibleValues) 
+                : .iterate(possibleValues))
+            )!
+        self.init(key: key, mock: mock)
     }
     
-    init(key: KP, possibleValues: [Value], shouldRandomize: Bool = false) {
-        var mock: Mock<Value> = shouldRandomize ? .randomize(possibleValues) : .iterate(possibleValues)
+    init(key: KP, generator: @escaping Mock<Value>.Generator, creationMethod: Mock<Value>.CreationMethod) {
+        let mock: Mock<Value> = try! Mock<Value>(
+            \.creationMethod => .generate(generator, creationMethod)
+            )!
         self.init(key: key, mock: mock)
     }
     
     init(key: KP, mock: Mock<Value>) {
-        self.key = key
         self.mock = mock
-        self.applicator = { root, value, state in
-            var instance: Root = root as! R
-            switch (value, state) {
-            case let (value, _) as (Value, Any?):
+        self.key = key
+        self.applicator = {root, value, _ in 
+            var instance: R = root as! R
+            if let value = value as? V {
                 instance[keyPath: key] = value
                 return (instance, true)
-            case let (values, state) as ([Value], [Int]):
-                guard !state.isEmpty else {
-                    return (instance, false)
-                }
-                instance[keyPath: key] = values[state[0]]
-                return (instance, true)
-            case let (values, state) as ([Value], [Bool]):
-                guard !state.isEmpty else {
-                    return (instance, false)
-                }
-                let shouldRandomize = state[0]
-                switch shouldRandomize {
-                case true:
-                    let index = Int(arc4random_uniform(UInt32(values.count - 1)))
-                    instance[keyPath: key] = values[index]
-                case false:
-                    instance[keyPath: key] = values[0]
-                }
-                return (instance, true)
-            case let (valueGenerator, state) as (Mock<Value>.Generator, [(Mock<Value>.GeneratorInput)]):
-                guard !state.isEmpty else {
-                    return (instance, false)
-                }
-                switch mock {
-                case .generate(let gen, let input):
-                    do {
-                        instance[keyPath: key] = try gen(input)
-                        return (instance, true)
-                    } catch {
-                        print(error)
-                        return (instance, false)
-                    }
-                default:
-                    return (instance, false)
-                }
-            default:
-                return (instance, false)
             }
+            return (instance, false)
         }
     }
     
@@ -440,12 +401,12 @@ var p: [PartialProperty<Test2>] = []
 p = p + (\Test2.str1, "asdf") ~ (\Test2.int4, 1337) // works lol
 p = [] + (\Test2.str1, "asdf") ~ (\Test2.int4, 1337) + (\Test2.int5, 999) // 
 
-let testy = Test2.init(with: p)
+let testy = Test2.init(p)
 
 let z: [PartialProperty<Zag>] = [] + (\.a, 2) ~ (\.b, "2") + (\.c, 2.0) // works
 //let z: [PartialProperty<Zag>] = [] + (\.a, 2) + (\.b, "2") + (\.c, 2.0) //doesn't work
 
-let testz = Zag(with: z)
+let testz = Zag(z)
 assert(testz != nil)
 assert(testz!.a == 2)
 assert(testz!.b == "2")
@@ -462,25 +423,6 @@ struct Mag: Mockable {
     }
 }
 
-infix operator =>
-infix operator ~>
-
-extension WritableKeyPath {
-    static func => (left: WritableKeyPath<Root, Value>, right: @autoclosure @escaping () throws -> Value) throws -> PartialProperty<Root> {
-        return Property<Root, Value>(key: left, value: try right()).partial
-    }
-}
-
-extension WritableKeyPath where Root: Mockable {
-    //static func => (left: WritableKeyPath<Root, Value>, right: @escaping Mock<Value>.Generator) throws -> PartialProperty<Root> {
-    //return MockProperty<Root, Value>(key: left, generator: right).partial
-    //}
-    
-    static func => (left: WritableKeyPath<Root, Value>, right: (generator: Mock<Value>.Generator, input: Mock<Value>.GeneratorInput)) throws -> PartialProperty<Root> {
-        return MockProperty<Root, Value>(key: left, generator: right.generator, input: right.input).partial
-    }
-}
-
 typealias GeneratorInput<V> = (initialValue: V?, index: Int?)
 
 func gen<V: StringProtocol> (_ input: GeneratorInput<V>) throws -> V { 
@@ -494,25 +436,93 @@ var m: [PartialProperty<Mag>] = try! [
     \.b => gen((nil, nil)),
     \.c => nil
 ]
+
 //m += (\.b, generator: gen)
 //m += (\.c, [1.0, 2.0, 2.5], shouldRandomize: true)
 
-let magtest1 = try! Mag(with: [
+let magtest1 = try! Mag(
     \.a => 2,
     \.b => gen((nil, nil)),
     \.c => nil
-    ]
 ) 
 
-let magtest2 = try! Mag(with: [
-    \.a => 2,
-    \.b => (generator: gen, input: (initialValue: nil, index: 2)),
-    \.c => nil
-    ]
-) 
+assert(magtest1 != nil)
+assert(magtest1?.a == 2)
+assert(magtest1?.b == "20")
+assert(magtest1?.c == nil)
+
+extension WritableKeyPath where Root: Mockable {
+    static func => (left: WritableKeyPath<Root, Value>, right: Mock<Value>) throws -> PartialProperty<Root> {
+        return MockProperty<Root, Value>(key: left, mock: right).partial
+    }
+}
+
+var magtest2 = [Mag]()
+
+for i in 0...5 {
+    magtest2.append((try! Mag(
+        \.a => 2,
+        \.b => Mock(iteration: i, default: nil, creationMethod: .iterate(["a", "b", "c", "d", "e"])),
+        \.c => nil
+        ))!
+    )
+}
+
+let letters = ["a", "b", "c", "d", "e"]
+
+for i in 0...4 {
+    assert(magtest2[i].b == letters[i])
+}
 
 extension Mag {
-    
+    // todo
     /// Custom property initter!
+}
+
+struct Hat {
+    //let a: Int // breaks PropertyInitializable if uncommented, 
+    // since let cannot be set via keypaths
     
+    //private var b: Int // breaks PropertyInitializable if uncommented, 
+    // since private var cannot be set via keypaths
+    
+    //let d = 1 // breaks PropertyInitializable if uncommented, 
+    // since let cannot be set via keypaths, 
+    // and there is no way to check if it has a default value
+    
+    //private var e = 1 // breaks PropertyInitializable if uncommented, 
+    // since private var cannot be set via keypaths, 
+    // and there is no way to check if it has a default value
+    
+    //private(set) var f = 1 // breaks PropertyInitializable if uncommented, 
+    // since f has a default value, 
+    // and private(set) is externally immutable once set
+    
+    private(set) var c: Int
+    
+    var g = 1 // must be set again for PropertyInitializable init to succeed
+    
+    var h: Int
+}
+
+extension Hat: PropertyInitializable {
+    static var _blank: Hat {
+        return Hat(c: 1, g: 1, h: 1)
+    }
+}
+
+do {
+    let testHat = try Hat(
+        //\.a => 2, // breaks if uncommented, as expected since a is let
+        //\.b => 2, // breaks if uncommented, as expected since b is private
+        //\.d = 2, // breaks if uncommented, as expected since d is let 
+        //\.e = 2, // breaks if uncommented, as expected since e is private
+        //\.f = 2, // breaks if uncommented, as expected since f has a default value, and private(set) is externally immutable once set
+        \.c => 2,
+        \.g => 2,
+        \.h => 2
+    )
+    assert(testHat != nil)
+} catch {
+    print(error)
 }
