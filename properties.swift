@@ -6,23 +6,17 @@ protocol AnyPropertyProtocol {
     associatedtype Root = Any
     associatedtype Value = Any
     associatedtype KP: AnyKeyPath
-    //typealias Applicator = (Root, Value?) -> (Root, didChange: Bool)
+
     var key: KP { get }
     var value: Value { get }
     var applicator: (Any, Any?, Any?) -> (Any, didChange: Bool) { get set }
 }
 
 protocol PartialPropertyProtocol: AnyPropertyProtocol
-where KP: PartialKeyPath<Root> {
-    //typealias Applicator = (Root, Value?) -> (Root, didChange: Bool)
-    
-}
+where KP: PartialKeyPath<Root> {}
 
 protocol PropertyProtocol: PartialPropertyProtocol
-where KP: WritableKeyPath<Root, Value> {
-    //typealias Applicator = (Root, Value?) -> (Root, didChange: Bool)
-    //var applicator: (Root, Value?) -> (Root, didChange: Bool) { get }
-}
+where KP: WritableKeyPath<Root, Value> {}
 
 // MARK: - Property Initializable
 
@@ -148,9 +142,7 @@ struct Property<R, V>: PropertyProtocol {
             return (instance, false)
         }
     }
-    
-    //todo: add the below to protocols?
-    
+        
     var partial: PartialProperty<Root> {
         return PartialProperty(self)
     }
