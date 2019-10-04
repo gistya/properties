@@ -21,7 +21,7 @@ This proposal introduces an opt-in protocol, `PropertyInitializable`, which prov
 
 The name “compositional init” means that this proposal allows the state of an object or struct to be assembled *compositionally* from sets of properties (including another instance). Compositional initialization allows mutations to be encapsulated in a clear, type-safe way.
 
-This proposal addresses the problems that motivated Chris Lattner’s excellent proposal, [SE-0018](https://github.com/apple/swift-evolution/blob/master/proposals/0018-flexible-memberwise-initialization.md), but in a different way. Hopefully compositional init can serve as the implementation of SE-0018, which unfortunately got tabled due lack of ABI impact.
+This proposal addresses the problems that motivated Matthew Johnson’s excellent proposal, [SE-0018](https://github.com/apple/swift-evolution/blob/master/proposals/0018-flexible-memberwise-initialization.md), but in a different way. Hopefully compositional init can serve as the implementation of SE-0018, which unfortunately got tabled due lack of ABI impact.
 
 I initially wrote this proposal in 2018 based on Swift 4. I have reviewed the changes and proposals since then and it does not seem like there has been anything that would make this proposal unnecessary; however, please correct me if I missed something.
 
