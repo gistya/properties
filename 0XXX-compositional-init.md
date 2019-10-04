@@ -23,13 +23,15 @@ The name “compositional init” means that this proposal allows the state of a
 
 This proposal addresses the problems that motivated Chris Lattner’s excellent proposal, [SE-0018](https://github.com/apple/swift-evolution/blob/master/proposals/0018-flexible-memberwise-initialization.md), but in a different way. Hopefully compositional init can serve as the implementation of SE-0018, which unfortunately got tabled due lack of ABI impact.
 
+I believe this may also address the desires expressed in the Swift Evolution discussion thread ["Record initialization and destructuring syntax"](https://forums.swift.org/t/record-initialization-and-destructuring-syntax/16631). I do not see any follow-up proposal for that, so I am assuming nothing has come of it yet. 
+
 Swift-evolution thread: [Discussion thread topic for that proposal](https://lists.swift.org/pipermail/swift-evolution/)
 
 ## Motivation
 
 Immutability carries many benefits including thread safety, simplification of state management, and improved code comprehensibility. It’s what makes functional programming so functional, which helps create unit-testable code. 
 
-However, in Swift 4, the benefits of immutability include neither:
+However, in Swift 5, the benefits of immutability include neither:
 
 (1) - "ease of making a copy that differs from the original in a subset of its properties — without lots of boilerplate,” nor (more generally),
 
@@ -66,7 +68,7 @@ Dynamic languages have been slower to embrace immutability, but support for this
 
 ## Proposed solution
 
-Compositional init solves both (1) and (2) by adding simple, clear, Swifty syntax for the initializing an immutable instance from a set of typesafe properties and an optional clone argument. Because this proposal is based purely upon Swift 4’s wonderful KeyPath and Mirror types, we get all the type safety and access restriction guarantees that they already carry. 
+Compositional init solves both (1) and (2) by adding simple, clear, Swifty syntax for the initializing an immutable instance from a set of typesafe properties and an optional clone argument. Because this proposal is based purely upon Swift 4/5’s wonderful KeyPath and Mirror types, we get all the type safety and access restriction guarantees that they already carry. 
 
 Traditional memberwise init:
 
@@ -124,9 +126,9 @@ Aside from any naming collisions (sorry), it should also have zero effect on sou
 
 ## Effect on ABI stability
 
-The initial PR for this proposal does not impact ABI stability in any way. 
+The initial PR for this proposal should not impact ABI stability, as far as I can tell. 
 
-However, if the final form of this proposal involves changes to the compiler (for example, if the compiler is updated to allow using KeyPath-based assignment to `let` variables during initialization) then perhaps there could be an effect on ABI stability.
+However, if the final form of this proposal involves changes to the compiler (for example, if the compiler is updated to allow using KeyPath-based assignment to `let` variables during initialization) then perhaps there could be an effect on ABI stability. I doubt it though, since this seems like an additive feature that should be able to be accomplished in an stable way.
 
 ## Effect on API resilience
 
@@ -150,3 +152,4 @@ One alternative is to simply avoid immutable “set once at init” style proper
 
 That workaround is not great because there is nothing to prevent mistakes or abuses.
 
+As well there was discussion on the aforementioned thread on destructuring, to which you may refer.
