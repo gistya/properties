@@ -1,6 +1,6 @@
 # Feature name
 
-* Proposal: [SE-0194](0194-compositional-init.md)
+* Proposal: [SE-0XXX](0XXX-compositional-init.md)
 * Authors: [Jonathan Gilbert](https://github.com/gistya)
 * Review Manager: TBD
 * Status: **Awaiting implementation**
