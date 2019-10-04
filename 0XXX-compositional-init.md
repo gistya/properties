@@ -1,17 +1,4 @@
-# Compositional Init
-
-* Proposal: [SE-0XXX](0XXX-compositional-init.md)
-* Authors: [Jonathan Gilbert](https://github.com/gistya)
-* Review Manager: TBD
-* Status: **Awaiting implementation**
-
-*During the review process, add the following fields as needed:*
-
-* Implementation: [apple/swift#NNNNN](https://github.com/apple/swift/pull/NNNNN)
-* Decision Notes: [Rationale](https://lists.swift.org/pipermail/swift-evolution/), [Additional Commentary](https://lists.swift.org/pipermail/swift-evolution/)
-* Bugs: [SR-NNNN](https://bugs.swift.org/browse/SR-NNNN), [SR-MMMM](https://bugs.swift.org/browse/SR-MMMM)
-* Previous Revision: [1](https://github.com/apple/swift-evolution/blob/...commit-ID.../proposals/NNNN-filename.md)
-* Previous Proposal: [SE-XXXX](XXXX-filename.md)
+# Compositional Initalization
 
 ## Introduction
 
@@ -19,13 +6,15 @@ This proposal introduces an opt-in protocol, `PropertyInitializable`, which prov
 - failable init from a collections of extensible, typesafe keypath-value *Property* objects
 - non-failable init to clone from another instance, mutating select properties
 
-The name “compositional init” means that this proposal allows the state of an object to be assembled *compositionally* from sets of properties (including another instance). Compositional initialization allows mutations to be encapsulated in a clear, type-safe way.
+The name “compositional init” means that this proposal allows the state of an object or struct to be assembled *compositionally* from sets of properties (including another instance). Compositional initialization allows mutations to be encapsulated in a clear, type-safe way.
 
 This proposal addresses the problems that motivated Chris Lattner’s excellent proposal, [SE-0018](https://github.com/apple/swift-evolution/blob/master/proposals/0018-flexible-memberwise-initialization.md), but in a different way. Hopefully compositional init can serve as the implementation of SE-0018, which unfortunately got tabled due lack of ABI impact.
 
-I believe this may also address the desires expressed in the Swift Evolution discussion thread ["Record initialization and destructuring syntax"](https://forums.swift.org/t/record-initialization-and-destructuring-syntax/16631). I do not see any follow-up proposal for that, so I am assuming nothing has come of it yet. 
+I initially wrote this proposal in 2018 based on Swift 4. I have reviewed the changes and proposals since then and it does not seem like there has been anything that would make this proposal unnecessary; however, please correct me if I missed something.
 
-Swift-evolution thread: [Discussion thread topic for that proposal](https://lists.swift.org/pipermail/swift-evolution/)
+From that review of past proposals, I find that this proposal may also address the desires expressed in the Swift Evolution discussion thread ["Record initialization and destructuring syntax"](https://forums.swift.org/t/record-initialization-and-destructuring-syntax/16631). I do not see any follow-up proposal for that, so hopefully this might help with that too. 
+
+I have a mostly working implementation made in the Swift 4 Playground (here)[https://github.com/gistya/properties/blob/master/properties.swift]. (A Swift 5 version of the playground is pending discussion on the Swift Evolution List.)
 
 ## Motivation
 
@@ -99,10 +88,6 @@ As a result of being based on `WritableKeyPath<Root, Value>`, the declaration `\
 - not the same type as the value being paired with it
 - non-existent
 
-The only drawback to the initial PR implementing this proposal is that immutability under compositional init requires using `private(set) var` on any properties that are to be represented within init compositions. Since WritableKeyPaths are pointers under the hood, they cannot currently be used inside an init method on any member of `self` unless that member is already initialized. So, while keypaths to uninitialized `let` variables are considered Writable by the compiler, bizarrely, they cannot actually be used for writing. I hope this is just a bug, and the core team would be amenable to fixing it.
-
-Otherwise, we may just look on the bright side: since compositional init is opt-in at the type level, we might feel it should be opt-in at the property level, too. Under the initial PR, it effectively is, since a property can `opt-out` by being a `let` or being a `private(set) var` with a default value.
-
 ## Detailed design
 
 This proposal introduces the following protocols:
@@ -122,17 +107,15 @@ This proposal introduces the “partially type-erasing lazy assignment operator�
 
 ## Source compatibility
 
-Aside from any naming collisions (sorry), it should also have zero effect on source code compatibility.
+Aside from any naming collisions (sorry), this proposal should have zero effect on source code compatibility.
 
 ## Effect on ABI stability
 
 The initial PR for this proposal should not impact ABI stability, as far as I can tell. 
 
-However, if the final form of this proposal involves changes to the compiler (for example, if the compiler is updated to allow using KeyPath-based assignment to `let` variables during initialization) then perhaps there could be an effect on ABI stability. I doubt it though, since this seems like an additive feature that should be able to be accomplished in an stable way.
-
 ## Effect on API resilience
 
-Compositional init should play nice, but I will leave it to the experts as to what aspects are suitable to make `@inlineable`.
+Compositional init should play nice, but I will leave it to the experts.
 
 ## Alternatives considered
 
