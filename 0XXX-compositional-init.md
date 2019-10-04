@@ -1,5 +1,18 @@
 # Compositional Initalization
 
+* Proposal: [SE-0XXX](0XXX-compositional-init.md)
+* Authors: [Jonathan Gilbert](https://github.com/gistya)
+* Review Manager: TBD
+* Status: **Awaiting implementation**
+
+*During the review process, add the following fields as needed:*
+
+* Implementation: [apple/swift#NNNNN](https://github.com/apple/swift/pull/NNNNN)
+* Decision Notes: [Rationale](https://lists.swift.org/pipermail/swift-evolution/), [Additional Commentary](https://lists.swift.org/pipermail/swift-evolution/)
+* Bugs: [SR-NNNN](https://bugs.swift.org/browse/SR-NNNN), [SR-MMMM](https://bugs.swift.org/browse/SR-MMMM)
+* Previous Revision: [1](https://github.com/apple/swift-evolution/blob/...commit-ID.../proposals/NNNN-filename.md)
+* Previous Proposal: [SE-XXXX](XXXX-filename.md)
+
 ## Introduction
 
 This proposal introduces an opt-in protocol, `PropertyInitializable`, which provides two new init methods:
