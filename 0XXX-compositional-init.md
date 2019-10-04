@@ -14,7 +14,7 @@ I initially wrote this proposal in 2018 based on Swift 4. I have reviewed the ch
 
 From that review of past proposals, I find that this proposal may also address the desires expressed in the Swift Evolution discussion thread ["Record initialization and destructuring syntax"](https://forums.swift.org/t/record-initialization-and-destructuring-syntax/16631). I do not see any follow-up proposal for that, so hopefully this might help with that too. 
 
-I have a mostly working implementation made in the Swift 4 Playground (here)[https://github.com/gistya/properties/blob/master/properties.swift]. (A Swift 5 version of the playground is pending discussion on the Swift Evolution List.)
+I have a mostly working implementation made in the Swift 4 Playground [here](https://github.com/gistya/properties/blob/master/properties.swift). (A Swift 5 version of the playground is pending discussion on the Swift Evolution List.)
 
 ## Motivation
 
