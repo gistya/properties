@@ -1,4 +1,4 @@
-# Feature name
+# Compositional Init
 
 * Proposal: [SE-0XXX](0XXX-compositional-init.md)
 * Authors: [Jonathan Gilbert](https://github.com/gistya)
