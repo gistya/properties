@@ -62,9 +62,9 @@ Some examples of static, typesafe, functional languages that allow the initializ
 - OCaml’s [functional updates](https://realworldocaml.org/v1/en/html/records.html#functional-updates): `let newRecord foo =
 { foo with quux = 42 };;`
 - A Successor-ML proposal for [functional record update proposal](http://sml-family.org/successor-ml/OldSuccessorMLWiki/Functional_record_extension_and_row_capture.html) suggests: `foo {defaults where quux=42}`
+- Elm features [updating records](http://elm-lang.org/docs/records#updating-records): `newRecord = { foo | quux = 42 }`
 
 Dynamic languages have been slower to embrace immutability, but support for this concept is growing:
-- Elm features [updating records](http://elm-lang.org/docs/records#updating-records): `newRecord = { foo | quux = 42 }`
 - An ECMAScript 7 proposal for [object spread initializer](https://github.com/tc39/proposal-object-rest-spread/blob/master/Spread.md) suggests: `let fooWithOverrides = { quux: 42 , ...foo };` etc. 
 - An ECMAScript 6 [library for clone + mutate](https://www.npmjs.com/package/transmutable)
 
