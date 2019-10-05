@@ -401,10 +401,9 @@ struct MockProperty<R: Mockable, V>: MockableProperty {
     }
 }
 
-// MARK: Additional Operators (to show bug)
+// MARK: Additional Operators 
 
 infix operator +: AdditionPrecedence
-infix operator ~: AdditionPrecedence
 
 /// Convenience extension on Array to support arrays of PartialProperty items.
 extension Array where Element == PartialProperty<Any?> {
@@ -412,17 +411,6 @@ extension Array where Element == PartialProperty<Any?> {
     /// and adding it to an array of PartialProperties. This allows the variable type
     /// of each property to be different without violating the static typing of the array.
     static func + <Root, Value>(left: Array<PartialProperty<Root>>, right: (WritableKeyPath<Root, Value>, Value)) -> Array<PartialProperty<Root>> { 
-        var new = left
-        print(left.count)
-        let partial = (Property<Root, Value>(key: right.0, value: right.1)).partial
-        new.append(partial)
-        print(new.count)
-        return new
-    }
-    
-    /// Same thing as above function. Had to make a second one because using the same 
-    /// one multiple times in a row does not compile correctly.
-    static func ~ <Root, Value>(left: Array<PartialProperty<Root>>, right: (WritableKeyPath<Root, Value>, Value)) -> Array<PartialProperty<Root>> { 
         var new = left
         print(left.count)
         let partial = (Property<Root, Value>(key: right.0, value: right.1)).partial
@@ -444,15 +432,11 @@ struct Zag: PropertyInitializable {
 
 /// Here there is a problem where for some reason, the infix operator is not treated correctly by the compiler:
 
-var p: [PartialProperty<Test2>] = []
-//p = p + (\Test2.str1, "asdf") + (\Test2.int4, 1337) //BUG: does not compile
-p = p + (\Test2.str1, "asdf") ~ (\Test2.int4, 1337) // But this works. Why?
-p = [] + (\Test2.str1, "asdf") ~ (\Test2.int4, 1337) + (\Test2.int5, 999) 
+var p: [PartialProperty<Test2>] = [] + (\Test2.str1, "asdf") + (\Test2.int4, 1337) + (\Test2.int5, 999) 
 
 let testy = Test2.init(p)
 
-//let z: [PartialProperty<Zag>] = [] + (\.a, 2) + (\.b, "2") + (\.c, 2.0) // Doesn't work, same bug/issue.
-let z: [PartialProperty<Zag>] = [] + (\.a, 2) ~ (\.b, "2") + (\.c, 2.0) // This works.
+let z: [PartialProperty<Zag>] = [] + (\.a, 2) + (\.b, "2") + (\.c, 2.0) 
 
 let testz = Zag(z)
 assert(testz != nil)
@@ -598,3 +582,27 @@ do {
 } catch {
     print(error)
 }
+
+struct Customer: PropertyInitializable {    
+    var name: String = ""
+    var zipcode: Int = 0
+    var addressLine1: String = ""
+    var addressLine2: String = ""
+    
+    static var _blank: Customer {
+        get { return Customer() }
+    }
+}
+
+let dataFromTestWebResponse = [PartialProperty<Customer>]() 
+    + (\.name, "Steve Jobs") 
+    + (\.zipcode, 97202) 
+    + (\.addressLine1, "Reed College")
+    + (\.addressLine2, "3203 SE Woodstock Blvd Box #121")
+
+if let customer: Customer = Customer(dataFromTestWebResponse) {
+    print(customer)
+} else {
+    print("Data is missing.")
+}
+
