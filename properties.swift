@@ -591,6 +591,7 @@ struct Customer: PropertyInitializable {
     var zipcode: Int = 0
     var addressLine1: String = ""
     var addressLine2: String = ""
+    var addressLine3: String = ""
     
     internal static var _blank: Customer {
         get { return Customer() }
@@ -609,3 +610,22 @@ if let customer: Customer = Customer(dataFromTestWebResponse) {
     print("Data is missing.")
 }
 
+let reedieData = [PartialProperty<Customer>]()
+    + (\.zipcode, 97202) 
+    + (\.addressLine1, "Reed College")
+    + (\.addressLine2, "3203 SE Woodstock Blvd")
+
+let studentBoxAssignments: [(String, Int)] = [("Steve Jobs", 121), ("The Woz", 314)]
+
+var customers = [Customer]()
+
+for (name, box) in studentBoxAssignments {
+    let data = reedieData + (\.name, name) + (\.addressLine3, "Box #\(box)")
+    if let customer: Customer = Customer(data) {
+        customers += [customer]
+    } else {
+        print("Data is missing.")
+    }
+}
+
+print(customers)
