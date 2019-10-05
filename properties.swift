@@ -184,7 +184,7 @@ struct Test2 {
 }
 
 extension Test2: PropertyInitializable {
-    static var _blank = Test2(str1: "ERROR-NOT-SET", int4: nil, int5: nil)
+    internal static var _blank = Test2(str1: "ERROR-NOT-SET", int4: nil, int5: nil)
 }
 
 /// Succeeds to init.
@@ -239,7 +239,7 @@ final class Foo {
 }
 
 extension Foo: PropertyInitializable {
-    static var _blank: Foo = Foo()
+    internal static var _blank: Foo = Foo()
 }
 
 var fooProps: [PartialProperty<Foo>] = [
@@ -278,7 +278,8 @@ struct Mock<Value>: PropertyInitializable {
     var iteration: Int
     var `default`: Value?
     var creationMethod: CreationMethod
-    static var _blank: Mock<Value> { 
+    
+    internal static var _blank: Mock<Value> { 
         return Mock<Value>(iteration: 0, default: nil, creationMethod: .none) 
     }
 }
@@ -425,7 +426,8 @@ struct Zag: PropertyInitializable {
     var a: Int
     var b: String
     var c: Double?
-    static var _blank: Zag {
+    
+    internal static var _blank: Zag {
         return Zag(a: 1, b: "1", c: 1.0)
     }
 } 
@@ -451,7 +453,8 @@ struct Mag: Mockable {
     var a: Int
     var b: String
     var c: Double?
-    static var _blank: Mag {
+    
+    internal static var _blank: Mag {
         return Mag(a: 1, b: "10", c: 1.0)
     }
 }
@@ -550,7 +553,7 @@ struct Hat {
 }
 
 extension Hat: PropertyInitializable {
-    static var _blank: Hat {
+    internal static var _blank: Hat {
         return Hat(c: 1, g: 1, h: 1)
     }
 }
@@ -589,7 +592,7 @@ struct Customer: PropertyInitializable {
     var addressLine1: String = ""
     var addressLine2: String = ""
     
-    static var _blank: Customer {
+    internal static var _blank: Customer {
         get { return Customer() }
     }
 }
