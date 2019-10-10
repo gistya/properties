@@ -258,7 +258,7 @@ extension Foo: PropertyInitializable {
 }
 
 /// Compiler won't accept this unless the we wrap the cast in parentheses.
-var fooProps: [PartialProperty<Foo>] = [
+var fooProps: [PartialProperty<Foo>] = try! [
     (\Foo.bar as! WritableKeyPath) <- 5
 ]
 
