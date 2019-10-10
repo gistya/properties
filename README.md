@@ -78,24 +78,24 @@ Traditional memberwise init:
 
 Compositional init cloning `fool` and mutating its `quux` property:
 
-    let food: Foo = Foo(clone: fool, mutating: \.quux => 42)
+    let food: Foo = Foo(clone: fool, mutating: \.quux <- 42)
 
 Compositional init failably initializing `foom` from an array of properties:
 
     let properties: [PartialProperty<Foo>] = 
     [
-       \.bar  => “two”, 
-       \.baz  =>  2.0, 
-       \.quux =>  nil
+       \.bar  <- “two”, 
+       \.baz  <-  2.0, 
+       \.quux <-  nil
     ]
 
     let foom: Foo? = Foo(properties)
 
 Compositional init failably initializing `foom` from variadic property arguments:
 
-    let foom: Foo? = Foo(\.bar => “two”, \.baz => 2.0, \.quux => nil)
+    let foom: Foo? = Foo(\.bar <- “two”, \.baz <- 2.0, \.quux <- nil)
 
-As a result of being based on `WritableKeyPath<Root, Value>`, the declaration `\Foo.bar => “two”` will fail to compile if the property `Foo.bar` is any of the following:
+As a result of being based on `WritableKeyPath<Root, Value>`, the declaration `\Foo.bar <- “two”` will fail to compile if the property `Foo.bar` is any of the following:
 - not accessible in the current scope
 - not writable in the current scope
 - not the same type as the value being paired with it
@@ -114,7 +114,7 @@ Accompanying these, we introduce implementations:
 - PartialProperty<Root>
 - Property<Root, Value>
 
-This proposal introduces the “partially type-erasing lazy assignment operator” `=>`, which returns a `PartialProperty<Root, Value>` from a `WritableKeyPath<Root,Value>` on the left side, and on the right, an `@autoclosure @escaping` that can accept either:
+This proposal introduces the “partially type-erasing lazy assignment operator” `<-`, which returns a `PartialProperty<Root, Value>` from a `WritableKeyPath<Root,Value>` on the left side, and on the right, an `@autoclosure @escaping` that can accept either:
 - a `Value` object, or
 - a function returning `Value` that will be lazily executed only at init.
 

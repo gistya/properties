@@ -233,32 +233,37 @@ let test5 = Test2(clone: test2!, with: properties3)
 assert(test5.str1 == "asdf", "test5.str1 should be 'asdf'")
 assert(test5.int4 == 1337, "test5.int5 should be 1337")
 
-final class Foo {
-    private(set) var bar: NSNumber = 0
-    private(set) var baz: URLSession? = nil
-}
-
-extension Foo: PropertyInitializable {
-    internal static var _blank: Foo = Foo()
-}
-
-var fooProps: [PartialProperty<Foo>] = [
-    Property(key: \Foo.bar as! WritableKeyPath, value: 5).partial
-]
-
-let foo = Foo(fooProps)
-
 // MARK: - Infix Operator
 
-/// Operator => allows association of a keypath with a value in a typesafe manner 
+/// Operator <- allows association of a keypath with a value in a typesafe manner 
 /// without initializing the root object.
-infix operator =>
+infix operator <-
 
 extension WritableKeyPath {
-    static func => (left: WritableKeyPath<Root, Value>, right: @autoclosure @escaping () throws -> Value) throws -> PartialProperty<Root> {
+    static func <- (left: WritableKeyPath<Root, Value>, right: @autoclosure @escaping () throws -> Value) throws -> PartialProperty<Root> {
         return Property<Root, Value>(key: left, value: try right()).partial
     }
 }
+
+/// Test for initializing a private(set) value 
+/// with force-cast WritableKeyPath
+final class Foo {
+    private(set) var bar: NSNumber?
+    private(set) var baz: URLSession?
+}
+
+extension Foo: PropertyInitializable {
+    /// Required due to present inability to WritableKeyPath to initialize a value.
+    internal static var _blank: Foo = Foo()
+}
+
+/// Compiler won't accept this unless the we wrap the cast in parentheses.
+var fooProps: [PartialProperty<Foo>] = [
+    (\Foo.bar as! WritableKeyPath) <- 5
+]
+
+let foo = Foo(fooProps)
+assert(foo != nil)
 
 // MARK: - Mockable Properties (Example Implementation)
 
@@ -348,7 +353,7 @@ struct MockProperty<R: Mockable, V>: MockableProperty {
     /// Initializing a MockProperty with a single value defaults the creationMethod to .single.
     init(key: KP, value: Value) {
         let mock: Mock<Value> = try! Mock<Value>(
-            \.creationMethod => .single(value)
+            \.creationMethod <- .single(value)
         )!
         self.init(key: key, mock: mock)
     }
@@ -358,8 +363,8 @@ struct MockProperty<R: Mockable, V>: MockableProperty {
     /// .randomize mode, where it will pick randomly from a set of values each time the getter is used.
     init(key: KP, possibleValues: [Value], shouldRandomize: Bool = false, iteration: Int) {
         let mock: Mock<Value> = try! Mock<Value>(
-            \.iteration => iteration,
-            \.creationMethod => (shouldRandomize 
+            \.iteration <- iteration,
+            \.creationMethod <- (shouldRandomize 
                 ? .randomize(possibleValues) 
                 : .iterate(possibleValues))
             )!
@@ -371,7 +376,7 @@ struct MockProperty<R: Mockable, V>: MockableProperty {
     /// and it may use the passed-in `creationMethod` to inform its behavior.
     init(key: KP, generator: @escaping Mock<Value>.Generator, creationMethod: Mock<Value>.CreationMethod) {
         let mock: Mock<Value> = try! Mock<Value>(
-            \.creationMethod => .generate(generator, creationMethod)
+            \.creationMethod <- .generate(generator, creationMethod)
             )!
         self.init(key: key, mock: mock)
     }
@@ -470,16 +475,16 @@ func gen<V: StringProtocol> (_ input: GeneratorInput<V>) throws -> V {
 
 /// Validate that compositional-style PropertyInitializable init works (using an array of properties).
 var m: [PartialProperty<Mag>] = try! [
-    \.a => 2,
-    \.b => gen((nil, nil)),
-    \.c => nil
+    \.a <- 2,
+    \.b <- gen((nil, nil)),
+    \.c <- nil
 ]
 
 /// Validate that PropertyInitializable init works as expected.
 let magtest1 = try! Mag(
-    \.a => 2,
-    \.b => gen((nil, nil)),
-    \.c => nil
+    \.a <- 2,
+    \.b <- gen((nil, nil)),
+    \.c <- nil
 ) 
 
 assert(magtest1 != nil)
@@ -487,9 +492,9 @@ assert(magtest1?.a == 2)
 assert(magtest1?.b == "20")
 assert(magtest1?.c == nil)
 
-/// Extension to support => operator with Mockable root.
+/// Extension to support <- operator with Mockable root.
 extension WritableKeyPath where Root: Mockable {
-    static func => (left: WritableKeyPath<Root, Value>, right: Mock<Value>) throws -> PartialProperty<Root> {
+    static func <- (left: WritableKeyPath<Root, Value>, right: Mock<Value>) throws -> PartialProperty<Root> {
         return MockProperty<Root, Value>(key: left, mock: right).partial
     }
 }
@@ -499,9 +504,9 @@ var magtest2 = [Mag]()
 /// Example 1 of using PropertyInitializable init with iterable value.
 for i in 0...5 {
     magtest2.append((try! Mag(
-        \.a => 2,
-        \.b => Mock(iteration: i, default: nil, creationMethod: .iterate(["a", "b", "c", "d", "e"])),
-        \.c => nil
+        \.a <- 2,
+        \.b <- Mock(iteration: i, default: nil, creationMethod: .iterate(["a", "b", "c", "d", "e"])),
+        \.c <- nil
         ))!
     )
 }
@@ -561,10 +566,10 @@ extension Hat: PropertyInitializable {
 do {
     let testHat = try Hat(
         /// Breaks if uncommented, as expected since a is let.
-        //\.a => 2, 
+        //\.a <- 2, 
         
         /// Breaks if uncommented, as expected since b is private.
-        //\.b => 2, 
+        //\.b <- 2, 
         
         /// Breaks if uncommented, as expected since d is let.
         //\.d = 2, 
@@ -576,9 +581,9 @@ do {
         /// and private(set) is externally immutable once set.
         //\.f = 2, 
         
-        \.c => 2,
-        \.g => 2,
-        \.h => 2
+        \.c <- 2,
+        \.g <- 2,
+        \.h <- 2
     )
     
     assert(testHat != nil)
